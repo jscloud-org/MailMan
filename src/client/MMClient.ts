@@ -1,15 +1,13 @@
 import { AutoQueue } from "@js-cloud/flashq";
+import { ServerResponse } from "common/message/ServerResponse";
 import { EventEmitter, WebSocket } from "ws";
-import { getSubscribeAckTag, HANDSHAKE_TAG, KILL_TAG, RECONNECT_TAG } from './constants';
-import EventMessagingRouter from './EventMessageRouter';
-import HandshakeRouter from './HandshakeRouter';
-import LogMessageRouter from './LogMessageRouter';
+import { createHandshakeRequest, createPublishRequest, createSubscribeRequest, ClientRequest, KillMessage, ReconnectMessage } from '../common/message/index'
 import MessageRouter from "../common/router/MessageRouter";
+import { getSubscribeAckTag, HANDSHAKE_TAG, KILL_TAG, RECONNECT_TAG } from './constants';
+import EventMessagingRouter from './routers/EventMessageRouter';
 import { ClientOptions, createDefaultOptions } from "./index";
-import KillMessage from '../common/message/killMessage'
-import ReconnectMessage from '../common/message/reconnectMessage'
-import { AckMessage,  createPublishMessage, createSubscribeMessage,createHandshakeMessage, 
-    Message, HandshakeMessage } from '../common/message';
+import LogMessageRouter from './routers/LogMessageRouter';
+import SystemRouter from './routers/SystemRouter';
 
 export type EventCallback = (payload:any,event?:string)=>void;
 export type StatusChangeCallback = (status:ConnectionState,mmClient:MMClient)=>void;
@@ -18,39 +16,39 @@ export const NOOP= ()=>{}
 
 export type ConnectionState ="OPEN"|"ACTIVE"|"INACTIVE"|"CLOSED"
 
-
 export class MMClient{
     
     private ws?:WebSocket   
     private alias?:string //user given names given to clients
-    public id?: string    //id assigned by the server  
+    public id: string    //id assigned by the server
     private URL:string    //Server URL  
-    private sendQueue: AutoQueue<Message>       //Queue for sending messages
-    private recieveQueue: AutoQueue<Message>    //Queue for recieving messages
-    private ackQueue: AutoQueue<AckMessage>     //Queue for recieving ack messages only
+    private sendQueue: AutoQueue<ClientRequest>       //Queue for sending messages
+    private recieveQueue: AutoQueue<ServerResponse>    //Queue for recieving messages
+    private ackQueue: AutoQueue<ServerResponse>     //Queue for recieving ack messages only
     private emitter:EventEmitter;               //Internal event emitter
     private connState: ConnectionState           //states -> "OPEN"|"ACTIVE"|"INACTIVE"|"CLOSED"
     private statusChangeCallback?:StatusChangeCallback  //called when status is changed
     private subscribedTopics:Map<string,EventCallback>  //Map of topics subscribed, used for re-subscribing when reconnecting 
     private eventRouter:MessageRouter                   //for routing event-based messages
-    private handshakeRouter:MessageRouter               //for routing hand-shake messages
-    private logRouter:MessageRouter;                    //for logging every message recieved
+    private systemRouter: MessageRouter               //for routing hand-shake messages
     private clientOptions:ClientOptions                 //options
     private forceDisconnect = false;
+    private additionalRouters: MessageRouter[];
 
-    constructor(URL:string,clientOptions?:ClientOptions){
+    constructor(URL: string, clientOptions?: ClientOptions, routers: MessageRouter[] = []) {
         this.URL=URL;
-        this.sendQueue=new AutoQueue<Message>();
+        this.sendQueue = new AutoQueue();
         this.sendQueue.pauseQueue();                    //send queue should be paused on start to deny all contact with server before handshake
-        this.recieveQueue = new AutoQueue<Message>();
-        this.ackQueue = new AutoQueue<AckMessage>();
-        this.alias=this.id=undefined
+        this.recieveQueue = new AutoQueue();
+        this.ackQueue = new AutoQueue();
+        this.alias = '';
+        this.id = 'NOT_ASSIGNED';
         this.connState='CLOSED'
         this.emitter = new EventEmitter();
+        this.additionalRouters = routers
         this.eventRouter = new EventMessagingRouter(this.ackQueue,this.recieveQueue);
-        this.subscribedTopics=new Map();
-        this.logRouter=new LogMessageRouter()
-        this.handshakeRouter=new HandshakeRouter(this.emitter);
+        this.subscribedTopics = new Map();
+        this.systemRouter = new SystemRouter(this.emitter);
         this.clientOptions=clientOptions || createDefaultOptions();
         this.attachDefaultListeners();
     }
@@ -63,6 +61,7 @@ export class MMClient{
         this.statusChangeCallback=callback;
     }
 
+
     /**
      * Publish a message payload to subscribers
      * @param {string} eventName Name of the event, should be unique
@@ -71,7 +70,7 @@ export class MMClient{
      */
     public publish(eventName:string,payload:any):boolean{
         try {
-            const msg = createPublishMessage(eventName, payload);
+            const msg = createPublishRequest(this.id, eventName, payload);
             this.sendQueue.enqueue(msg);
             return true;
         } catch (error) {
@@ -160,7 +159,7 @@ export class MMClient{
      * Enqueue message to Queue for processing
      * @param {Message} data 
      */
-    protected send(data: Message) {
+    protected send(data: ClientRequest) {
         this.sendQueue.enqueue(data);
     }
 
@@ -168,7 +167,7 @@ export class MMClient{
     private subscribeToServer(eventName:string,ack?:SubscribeAcknowledgement){
         const tag=getSubscribeAckTag(eventName);
         this.emitter.on(tag, ack || NOOP);
-        const subMsg=createSubscribeMessage(eventName);
+        const subMsg = createSubscribeRequest(this.id, eventName);
         this.send(subMsg)
     }
 
@@ -181,18 +180,19 @@ export class MMClient{
         this.disconnect();
 
     }
+
     //initial client handshake after connection and exchange client id
     private performHandshake(){
 
         //Registering an internal event before sending message
-        this.emitter.once(HANDSHAKE_TAG, (res: HandshakeMessage) => {
+        this.emitter.once(HANDSHAKE_TAG, (res: ServerResponse) => {
 
             try {
                 if (res.success) {
-                    const { id } = res;
-                    if(!id)
+                    const { clientId } = res;
+                    if (!clientId)
                         throw new Error('Invalid Client ID recieved');
-                    this.id = id;
+                    this.id = clientId;
                     this.runAutoSubscribe();        //re-register subscriptions after re-connection
                     this.connState = 'ACTIVE';
                     this.sendQueue.resumeQueue();   //resume queue processing
@@ -207,7 +207,7 @@ export class MMClient{
         })
 
         //build handshake message 
-        const msg=createHandshakeMessage();
+        const msg = createHandshakeRequest();
         this.ws?.send(JSON.stringify(msg))
     }
 
@@ -262,9 +262,12 @@ export class MMClient{
 
         this.ws.on('message',(data,isBinary)=>{
             let handled=false;
-            handled=this.handshakeRouter.onMessageRecieved(data);
+            handled = this.systemRouter.onMessageRecieved(data, isBinary);
             if(!handled)
-                this.eventRouter.onMessageRecieved(data);
+                this.eventRouter.onMessageRecieved(data, isBinary);
+            this.additionalRouters.forEach(router => {
+                router.onMessageRecieved(data, isBinary);
+            })
         })
 
         this.ws.on("error", (err) => {
@@ -275,13 +278,28 @@ export class MMClient{
 
         //handle items from send-queue
         this.sendQueue.onDequeue((msg)=>{
+
+            /**
+             * If the message was queued before connection was 'ACTIVE' (before id was assigned by server), the queued 
+             * message will have 'NOT_ASSIGNED' tag. To overcome this issue, we will verify if all the msg sent to the server
+             * has an id, if not, set current id.
+             */
+            if (msg?.issuer === 'NOT_ASSIGNED') {
+                msg.issuer = this.id;
+            }
+
             this.ws?.send(JSON.stringify(msg));
         })
 
         //handle items from recieve-queue
         this.recieveQueue.onDequeue((item)=>{
-            if (item && item.action === 'publish' && item.event) {
-                this.emitter.emit(item.event, item.payload);
+
+            switch (item?.action) {
+                case 'publish':
+                    if (item.event && item.payload)
+                        this.emitter.emit(item.event, item.payload);
+                    break;
+                default: return;
             }
         })
 

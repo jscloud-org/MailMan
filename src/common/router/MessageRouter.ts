@@ -1,5 +1,5 @@
+import { ServerResponse } from "common/message/ServerResponse";
 import { RawData } from "ws";
-import { Message } from "../message/message";
 
 export default abstract class MessageRouter{
     public onMessageRecieved(msg:RawData,isBinary?:boolean):boolean{
@@ -11,6 +11,6 @@ export default abstract class MessageRouter{
         }
     }
 
-    protected abstract routeMessage(msg:Message):boolean;
+    protected abstract routeMessage(msg: ServerResponse): boolean;
     
 }

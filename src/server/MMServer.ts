@@ -4,9 +4,6 @@ import { createServer as createHttpsServer } from 'https';
 import { v4 as uuid } from 'uuid';
 import { WebSocket, WebSocketServer } from 'ws';
 import Logger from '../common/Logger';
-import { createServerHandshakeMessage } from '../common/message/handshakeMessage';
-import { createKillMessage } from '../common/message/killMessage';
-import { createReconnectMessage } from '../common/message/reconnectMessage';
 import MessageRouter from '../common/router/MessageRouter';
 import HubNotInitialized from './Errors/HubNotInitialized';
 import HashMapRegistryAdapter from './Registry/adapter/HashMapRegistryAdapter';
@@ -14,6 +11,8 @@ import RegistryAdapter from './Registry/adapter/RegistryAdapter';
 import ClientRegistry from './Registry/ClientRegistry';
 import EventRouter from './Router/EventRouter';
 import SSLConfig from './SSLConfig';
+import ServerMessageRouter from '../common/router/ServerMessageRouter';
+import { createHandshakeAckResponse, createKillResponse, createReconnectResponse, TimeoutType } from '../common/message/ServerResponse'
 
 export type VerifyClientCallback=(request:IncomingMessage,cb:(error?:Error,id?:string)=>void)=>void;
 
@@ -30,8 +29,8 @@ export class MMServer{
     private httpServer: Server
     private clientRegistry: ClientRegistry
     private authenticator: VerifyClientCallback;
-    private router: MessageRouter
-    private additionalRouters: MessageRouter[]
+    private router: ServerMessageRouter
+    private additionalRouters: ServerMessageRouter[]
     private log: Function
 
     PORT: number
@@ -39,8 +38,7 @@ export class MMServer{
     private constructor(PORT: number, sslConfig: SSLConfig | undefined,
         adapter: RegistryAdapter,
         authenticator: VerifyClientCallback,
-        router: MessageRouter = new EventRouter(),
-        additionalRouters: MessageRouter[]=[]) {
+        additionalRouters: ServerMessageRouter[] = []) {
         this.PORT = PORT;
         this.log = new Logger("SERVER").log;
         this.log('Initializing new Hub Server');
@@ -56,7 +54,7 @@ export class MMServer{
             noServer: true
         });
 
-        this.router = router;
+        this.router = new EventRouter();
         this.additionalRouters = additionalRouters;
         this.authenticator = authenticator;
         this.clientRegistry = ClientRegistry.init(adapter);
@@ -118,7 +116,8 @@ export class MMServer{
             })
 
         
-            const handshakeMessage = createServerHandshakeMessage(client);
+
+            const handshakeMessage = createHandshakeAckResponse(client);
 
             socket.send(JSON.stringify(handshakeMessage));
 
@@ -149,8 +148,9 @@ export class MMServer{
     public static init(PORT: number,
         sslConfig?: SSLConfig,
         handler: RegistryAdapter = new HashMapRegistryAdapter(),
-        authenticator: VerifyClientCallback=defaultAuthenticator): MMServer {
-        this.mInstance = new MMServer(PORT, sslConfig, handler, authenticator);
+        authenticator: VerifyClientCallback = defaultAuthenticator,
+        routers?: ServerMessageRouter[]): MMServer {
+        this.mInstance = new MMServer(PORT, sslConfig, handler, authenticator, routers);
         return this.mInstance;
     }
 
@@ -159,9 +159,10 @@ export class MMServer{
         socket?.close();
     }
 
-    public killClient(client: string, timeout?: number, reason?: string) {
+    public killClient(client: string, timeout?: TimeoutType, reason?: string) {
         const socket = ClientRegistry.getInstance().getClient(client);
-        const msg = JSON.stringify(createKillMessage(reason || 'Reason not found', timeout));
+
+        const msg = JSON.stringify(createKillResponse(reason || 'Reason not found', timeout));
         socket?.send(msg);
     }
 
@@ -170,9 +171,9 @@ export class MMServer{
             .forEach((client) => this.killClient(client, undefined, 'reason'));
     }
 
-    public reconnectClient(client: string, timeout: number = 1000) {
+    public reconnectClient(client: string, timeout?: number) {
         const socket = ClientRegistry.getInstance().getClient(client);
-        const msg = JSON.stringify(createReconnectMessage(timeout));
+        const msg = JSON.stringify(createReconnectResponse(timeout));
         socket?.send(msg);
     }
 

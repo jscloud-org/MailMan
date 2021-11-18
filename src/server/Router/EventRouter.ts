@@ -1,10 +1,12 @@
-import { Message } from "../../common/message/message";
+import ClientRegistry from "../Registry/ClientRegistry";
 import MessageRouter from "../../common/router/MessageRouter";
+import { ClientRequest } from '../../common/message'
+import ServerMessageRouter from '../../common/router/ServerMessageRouter'
 
-export default class EventRouter extends MessageRouter {
+export default class EventRouter extends ServerMessageRouter {
 
-    protected routeMessage(msg: Message,isBinary?:boolean): boolean {
-        switch(msg.action){
+    protected routeMessage(msg: ClientRequest): boolean {
+        switch (msg.action) {
             case 'handshake':
                 this.handleHandshake(msg);
                 break;
@@ -15,27 +17,29 @@ export default class EventRouter extends MessageRouter {
                 this.handlePublish(msg);
                 break;
             case 'subscribe':
-                this.handleSubscribe(msg)        
+                this.handleSubscribe(msg)
                 break;
 
-            default:return false;
+            default: return false;
         }
         return true;
     }
 
-    handleSubscribe(msg: Message) {
+    handleSubscribe(msg: ClientRequest) {
+        if (msg.issuer && msg.event)
+            ClientRegistry.getInstance().subscribeTo(msg.issuer, msg.event);
         console.log('[subscribe]', msg);
     }
 
-    handleHandshake(msg:Message){
+    handleHandshake(msg: ClientRequest) {
         console.log('[Handshake]',msg);
     }
 
-    handleInfo(msg:Message){
+    handleInfo(msg: ClientRequest) {
         console.log('[Info]', msg);
     }
 
-    handlePublish(msg:Message){
+    handlePublish(msg: ClientRequest) {
         console.log('[Publish]', msg);
     }
 
