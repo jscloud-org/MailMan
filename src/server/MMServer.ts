@@ -3,17 +3,17 @@ import { createServer as createHttpServer, IncomingMessage, Server } from 'http'
 import { createServer as createHttpsServer } from 'https';
 import { v4 as uuid } from 'uuid';
 import { WebSocket, WebSocketServer } from 'ws';
-import { createServerHandshakeMessage } from '../common/message/handshakeMessage';
 import Logger from '../common/Logger';
-import HubNotInitialized from './Errors/HubNotInitialized';
-import ClientRegistry from './Registry/ClientRegistry';
-import HashMapRegistryAdapter from './Registry/adapter/HashMapRegistryAdapter';
-import RegistryAdapter from './Registry/adapter/RegistryAdapter';
-import EventRouter from './Router/EventRouter';
-import SSLConfig from './SSLConfig';
-import MessageRouter from '../common/router/MessageRouter';
+import { createServerHandshakeMessage } from '../common/message/handshakeMessage';
 import { createKillMessage } from '../common/message/killMessage';
 import { createReconnectMessage } from '../common/message/reconnectMessage';
+import MessageRouter from '../common/router/MessageRouter';
+import HubNotInitialized from './Errors/HubNotInitialized';
+import HashMapRegistryAdapter from './Registry/adapter/HashMapRegistryAdapter';
+import RegistryAdapter from './Registry/adapter/RegistryAdapter';
+import ClientRegistry from './Registry/ClientRegistry';
+import EventRouter from './Router/EventRouter';
+import SSLConfig from './SSLConfig';
 
 export type VerifyClientCallback=(request:IncomingMessage,cb:(error?:Error,id?:string)=>void)=>void;
 
@@ -154,19 +154,31 @@ export class MMServer{
         return this.mInstance;
     }
 
-    public killAllClients(){
-        ClientRegistry.getInstance().getAllClients().forEach((client)=>{
-             const socket=ClientRegistry.getInstance().getClient(client);
-             const msg=JSON.stringify(createKillMessage('I dont like you'));
-             socket?.send(msg);
-        })
+    public dropConnection(client: string) {
+        const socket = ClientRegistry.getInstance().getClient(client);
+        socket?.close();
     }
+
+    public killClient(client: string, timeout?: number, reason?: string) {
+        const socket = ClientRegistry.getInstance().getClient(client);
+        const msg = JSON.stringify(createKillMessage(reason || 'Reason not found', timeout));
+        socket?.send(msg);
+    }
+
+    public killAllClients(){
+        ClientRegistry.getInstance().getAllClients()
+            .forEach((client) => this.killClient(client, undefined, 'reason'));
+    }
+
+    public reconnectClient(client: string, timeout: number = 1000) {
+        const socket = ClientRegistry.getInstance().getClient(client);
+        const msg = JSON.stringify(createReconnectMessage(timeout));
+        socket?.send(msg);
+    }
+
     public reconnectAllClients() {
-        ClientRegistry.getInstance().getAllClients().forEach((client) => {
-            const socket = ClientRegistry.getInstance().getClient(client);
-            const msg = JSON.stringify(createReconnectMessage(1000));
-            socket?.send(msg);
-        })
+        ClientRegistry.getInstance().getAllClients()
+            .forEach((client) => this.reconnectClient(client))
     }
 
     public getClientCount(): number {

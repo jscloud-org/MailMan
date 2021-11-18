@@ -1,6 +1,6 @@
 import { AutoQueue } from "@js-cloud/flashq";
 import { EventEmitter, WebSocket } from "ws";
-import { getSubscribeAckTag } from './constants';
+import { getSubscribeAckTag, HANDSHAKE_TAG, KILL_TAG, RECONNECT_TAG } from './constants';
 import EventMessagingRouter from './EventMessageRouter';
 import HandshakeRouter from './HandshakeRouter';
 import LogMessageRouter from './LogMessageRouter';
@@ -18,11 +18,12 @@ export const NOOP= ()=>{}
 
 export type ConnectionState ="OPEN"|"ACTIVE"|"INACTIVE"|"CLOSED"
 
+
 export class MMClient{
     
     private ws?:WebSocket   
     private alias?:string //user given names given to clients
-    private id?:string    //id assigned by the server  
+    public id?: string    //id assigned by the server  
     private URL:string    //Server URL  
     private sendQueue: AutoQueue<Message>       //Queue for sending messages
     private recieveQueue: AutoQueue<Message>    //Queue for recieving messages
@@ -35,6 +36,7 @@ export class MMClient{
     private handshakeRouter:MessageRouter               //for routing hand-shake messages
     private logRouter:MessageRouter;                    //for logging every message recieved
     private clientOptions:ClientOptions                 //options
+    private forceDisconnect = false;
 
     constructor(URL:string,clientOptions?:ClientOptions){
         this.URL=URL;
@@ -131,10 +133,20 @@ export class MMClient{
      * Disconnect from server
      */
     public disconnect(){
-        if(this.connState!=='CLOSED' && this.ws){
-            this.ws.terminate();
+        this.autoDisconnect(true);
+    }
+
+    private autoDisconnect(forceDisconnect = false) {
+        if (this.connState !== 'CLOSED' && this.ws) {
+            this.sendQueue.pauseQueue();
+            this.connState = 'INACTIVE';
+            this.forceDisconnect = forceDisconnect;
+            this.statusChangeCallback && this.statusChangeCallback('INACTIVE', this);
+            this.ws.close();
         }
     }
+
+
 
     /**
      * Number of backlog messages pending in the Queue
@@ -148,7 +160,7 @@ export class MMClient{
      * Enqueue message to Queue for processing
      * @param {Message} data 
      */
-    public send(data:Message){
+    protected send(data: Message) {
         this.sendQueue.enqueue(data);
     }
 
@@ -173,7 +185,7 @@ export class MMClient{
     private performHandshake(){
 
         //Registering an internal event before sending message
-        this.emitter.on('_handshake_',(res:HandshakeMessage)=>{
+        this.emitter.once(HANDSHAKE_TAG, (res: HandshakeMessage) => {
 
             try {
                 if (res.success) {
@@ -205,8 +217,8 @@ export class MMClient{
         if(!this.ws)
             return;
 
-        //Remote Kill command 
-        this.emitter.on('_kill_',(data:KillMessage)=>{
+        //process only once when a remote kill command recieved and emiited by internal emiiter 
+        this.emitter.once(KILL_TAG /* KILL event name */, (data: KillMessage) => {
             console.log('Killing client, reason',data.reason);
             if(data.timeout==='immediate'){
                 this.disconnect();
@@ -216,8 +228,8 @@ export class MMClient{
             }
         })
 
-        //Remote reconnect command
-        this.emitter.on('_reconnect_', (data: ReconnectMessage) => {
+        //process only once when a remote reconnect command recieved and emiited by internal emiiter
+        this.emitter.once(RECONNECT_TAG /* RECONNECT event name */, (data: ReconnectMessage) => {
             console.log('reconnecting to server in', data.timeout,'ms');
             if (data.timeout === 'immediate') {
                 this.reconnect();
@@ -227,18 +239,25 @@ export class MMClient{
             }
         })
 
-        this.ws.on('open',()=>{
+        this.ws.on('open', () => {
             console.log('Connection open');
             this.connState="OPEN";
             this.statusChangeCallback && this.statusChangeCallback('OPEN', this);
             this.performHandshake();
         })
 
-        this.ws.on("close",()=>{
-            console.log('Connection close');
+        this.ws.on("close", () => {
+            console.log('Connection closed');
             this.connState = 'CLOSED'
             this.sendQueue.pauseQueue();
             this.statusChangeCallback && this.statusChangeCallback('CLOSED', this);
+
+            //perform reconnection if autoDisconnect
+            if (this.clientOptions.autoReconnect && !this.forceDisconnect /* Not disconnected manually */) {
+                console.log('Reconnecting to server...');
+                this.connect();
+
+            }
         })
 
         this.ws.on('message',(data,isBinary)=>{
