@@ -118,6 +118,7 @@ export class MMClient{
 
     private scheduleReconnection() {
         this.reconnectionTrial++;
+        //@ts-ignore
         let delay = Math.max(this.lastReconnectDelay, this.clientOptions.reconnectTimeoutMs);
         if (this.clientOptions.reconnectStrategy === 'INCREMENTAL_INTERVAL') {
             delay *= 2;
@@ -278,6 +279,7 @@ export class MMClient{
             //perform reconnection if autoDisconnect
             if (this.clientOptions.autoReconnect
                 && !this.forceDisconnect /* Not disconnected manually */
+                //@ts-ignore
                 && this.reconnectionTrial <= this.clientOptions.reconnectLimit /*Retry limit not exceeded */) {
 
                 this.reconnectTimeout = this.scheduleReconnection();

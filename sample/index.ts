@@ -1,17 +1,27 @@
-import { MMClient } from '../src';
+import { MMClient } from '../src'
 
-const client = new MMClient('ws://localhost:4000', {
-    reconnectStrategy: 'FIXED_INTERVAL',
-    reconnectTimeoutMs: 1000
-});
 
-client.onStatusChanged((status, mClient) => {
-    if (status === 'ACTIVE') {
-        console.log('master id:', client.id)
-        fireUpSubscribers();
-    }
-})
+const spawnClient = () => {
+    const client = new MMClient('ws://localhost:4000', {
+        autoReconnect: false
+    });
 
+    client.onStatusChanged((status, mClient) => {
+        if (status === 'ACTIVE') {
+            console.log('connection active:', client.id);
+            spawnClient();
+        }
+        if (status === 'CLOSED' || status === 'INACTIVE')
+            return;
+
+    })
+
+    client.connect();
+}
+
+spawnClient();
+
+/*
 const publish = () => client.publish('something', {
     data: 'This is my first publish message'
 })
@@ -45,4 +55,4 @@ const fireUpSubscribers = () => {
 //setTimeout(() => MMServer.getInstance().killAllClients(), 500);
 
 //setInterval(() => MMServer.getInstance().reconnectAllClients(), 1000);
-
+*/

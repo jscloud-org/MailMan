@@ -1,4 +1,4 @@
-export {MMClient,EventCallback} from './client';
-export * from './client/index'
-export { MMServer } from './server'
-export * from './server/index'
+export { MMClient, EventCallback } from './client/MMClient';
+export { MMServer } from './server/MMServer'
+export * from './client'
+export * from './server'

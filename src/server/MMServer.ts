@@ -94,9 +94,11 @@ export class MMServer{
 
         this.socketServer.on('connection', (socket: WebSocket, request: IncomingMessage, client: string) => {
 
+
             ClientRegistry.getInstance().addClient(client, socket);
 
             this.log('New Connection from ' + client, 'info');
+            this.log('Active connections: ' + this.getClientCount())
 
             socket.on('message', (data, isBinary) => {
                 
@@ -121,8 +123,6 @@ export class MMServer{
             socket.on('ping', (data) => {
                 this.log('Ping Recieved, data: ' + data.toString(), 'success');
             })
-
-        
 
             const handshakeMessage = createHandshakeAckResponse(client);
 
