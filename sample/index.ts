@@ -1,7 +1,9 @@
 import { MMClient } from '../src'
+import LogMessageRouter from '../src/client/routers/LogMessageRouter';
 
 
-const spawnClient = () => {
+
+for (let i = 0; i < 10; i++) {
     const client = new MMClient('ws://localhost:4000', {
         autoReconnect: false
     });
@@ -9,17 +11,26 @@ const spawnClient = () => {
     client.onStatusChanged((status, mClient) => {
         if (status === 'ACTIVE') {
             console.log('connection active:', client.id);
-            spawnClient();
+            // spawnClient();
         }
-        if (status === 'CLOSED' || status === 'INACTIVE')
-            return;
-
     })
-
+    client.subscribe('broadcast', (data) => console.log(data))
     client.connect();
 }
 
-spawnClient();
+const client = new MMClient('ws://localhost:4000', {
+    autoReconnect: false
+});
+
+client.onStatusChanged((status, mClient) => {
+    if (status === 'ACTIVE') {
+        console.log('connection active:', client.id);
+        // spawnClient();
+    }
+})
+
+client.connect();
+client.broadcast({ data: 'data' })
 
 /*
 const publish = () => client.publish('something', {

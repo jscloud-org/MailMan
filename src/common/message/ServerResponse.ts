@@ -1,5 +1,5 @@
 
-export type ServerResponseActions = 'subscribe_ack' | 'handshake_ack' | 'info_ack' | 'publish' | 'publish_ack' | 'kill' | 'reconnect'
+export type ServerResponseActions = 'subscribe_ack' | 'handshake' | 'info_ack' | 'publish' | 'publish_ack' | 'kill' | 'reconnect' | 'broadcast'
 export type TimeoutType = 'immediate' | number;
 
 export interface ServerResponse {
@@ -45,7 +45,7 @@ export function createErrorResponse(action: ServerResponseActions, error: Error)
 export function createHandshakeAckResponse(clientId: string): ServerResponse {
     return {
         success: true,
-        action: 'handshake_ack',
+        action: 'handshake',
         clientId,
         issuedAt: Date.now()
     }
@@ -85,6 +85,16 @@ export function createReconnectResponse(timeout: TimeoutType = 'immediate'): Rec
         success: true,
         action: 'reconnect',
         timeout,
+        issuedAt: Date.now()
+    }
+}
+
+export function createBroadcastResponse(event: string, payload: any): ServerResponse {
+    return {
+        success: true,
+        action: 'broadcast',
+        event,
+        payload,
         issuedAt: Date.now()
     }
 }

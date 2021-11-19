@@ -17,7 +17,7 @@ export default class SystemRouter extends MessageRouter {
             this.emitter.emit(RECONNECT_TAG, msg);
         if (msg.action === 'kill')
             this.emitter.emit(KILL_TAG, msg);
-        if (msg.action === 'handshake_ack')
+        if (msg.action === 'handshake')
             this.emitter.emit(HANDSHAKE_TAG, msg);
         return false;
     }

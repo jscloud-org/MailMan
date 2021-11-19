@@ -125,6 +125,7 @@ export class MMServer{
             })
 
             const handshakeMessage = createHandshakeAckResponse(client);
+            console.log('message is', handshakeMessage)
 
             socket.send(JSON.stringify(handshakeMessage));
 

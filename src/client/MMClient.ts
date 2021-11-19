@@ -1,9 +1,9 @@
 import { AutoQueue } from "@js-cloud/flashq";
 import { ServerResponse } from "common/message/ServerResponse";
 import { WebSocket } from "ws";
-import { createHandshakeRequest, createPublishRequest, createSubscribeRequest, ClientRequest, KillMessage, ReconnectMessage } from '../common/message/index'
+import { createPublishRequest, createSubscribeRequest, ClientRequest, KillMessage, ReconnectMessage, createBroadcastRequest } from '../common/message/index'
 import MessageRouter from "../common/router/MessageRouter";
-import { getSubscribeAckTag, HANDSHAKE_TAG, KILL_TAG, RECONNECT_TAG } from '../common/constants';
+import { BROADCASR_EVENT, BROADCAST_EVENT, getSubscribeAckTag, HANDSHAKE_TAG, KILL_TAG, RECONNECT_TAG } from '../common/constants';
 import EventMessagingRouter from './routers/EventMessageRouter';
 import { ClientOptions, createDefaultOptions } from "./index";
 import LogMessageRouter from './routers/LogMessageRouter';
@@ -78,14 +78,23 @@ export class MMClient{
     public publish(eventName:string,payload:any):boolean{
         try {
             const msg = createPublishRequest(this.id, eventName, payload);
-            this.sendQueue.enqueue(msg);
+            this.send(msg);
             return true;
         } catch (error) {
             throw error;
         }
         
     }
-    
+
+    /**
+     * Broadcast a msg to all clients connected to the host server
+     * @param {Object} payload Any object
+     */
+    public broadcast(payload: any) {
+        const msg = createBroadcastRequest(this.id, payload);
+        this.send(msg);
+    }
+
     /**
      * Subscribe to messages from clients
      * @param {string} eventName 
@@ -200,10 +209,13 @@ export class MMClient{
 
     }
 
-    //initial client handshake after connection and exchange client id
-    private performHandshake(){
+    //default listeners 
+    private attachDefaultListeners() {
 
-        //Registering an internal handshake event before sending message
+        if (!this.ws)
+            return;
+
+        //Registering an internal handshake event for setting client variables
         this.emitter.once(HANDSHAKE_TAG, (res: ServerResponse) => {
 
             try {
@@ -220,21 +232,10 @@ export class MMClient{
                 else
                     throw res.error || new Error('Handshake was not successfull');
             } catch (error) {
-                this.ws?.emit('error', error );
+                this.ws?.emit('error', error);
             }
-            
+
         })
-
-        //build handshake message 
-        const msg = createHandshakeRequest();
-        this.ws?.send(JSON.stringify(msg))
-    }
-
-    //default listeners 
-    private attachDefaultListeners(){
-
-        if(!this.ws)
-            return;
 
         //process only once when a remote kill command recieved and emiited by internal emiiter 
         this.emitter.once(KILL_TAG /* KILL event name */, (data: KillMessage) => {
@@ -266,7 +267,6 @@ export class MMClient{
 
             this.connState="OPEN";
             this.statusChangeCallback && this.statusChangeCallback('OPEN', this);
-            this.performHandshake();
         })
 
         this.ws.on("close", () => {
@@ -318,12 +318,16 @@ export class MMClient{
         })
 
         //handle items from recieve-queue
-        this.recieveQueue.onDequeue((item)=>{
-
+        this.recieveQueue.onDequeue((item) => {
             switch (item?.action) {
                 case 'publish':
                     if (item.event && item.payload)
                         this.emitter.emit(item.event, item.payload);
+                    break;
+                case 'broadcast':
+                    console.log('payload is ', item);
+                    if (item.payload)
+                        this.emitter.emit(BROADCAST_EVENT, item.payload);
                     break;
                 default: return;
             }

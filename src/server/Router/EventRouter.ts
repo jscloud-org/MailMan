@@ -16,9 +16,6 @@ export default class EventRouter extends ServerMessageRouter {
 
     protected routeMessage(msg: ClientRequest): boolean {
         switch (msg.action) {
-            case 'handshake':
-                this.handleHandshake(msg);
-                break;
             case 'info':
                 this.handleInfo(msg);
                 break;
@@ -28,7 +25,9 @@ export default class EventRouter extends ServerMessageRouter {
             case 'subscribe':
                 this.handleSubscribe(msg)
                 break;
-
+            case 'broadcast':
+                this.handleBroadcast(msg);
+                break;
             default: return false;
         }
         return true;
@@ -44,10 +43,6 @@ export default class EventRouter extends ServerMessageRouter {
        // console.log('[subscribe]', msg);
     }
 
-    handleHandshake(msg: ClientRequest) {
-       // console.log('[Handshake]',msg);
-    }
-
     handleInfo(msg: ClientRequest) {
        // console.log('[Info]', msg);
     }
@@ -56,11 +51,24 @@ export default class EventRouter extends ServerMessageRouter {
         if (msg.event && msg.payload) {
             console.log('Sending publish message to ', ClientRegistry.getInstance().getSubscribersList(msg.event).length, 'subscribers');
             ClientRegistry.getInstance().getSubscribersList(msg.event).forEach(id => {
-                const socket = ClientRegistry.getInstance().getClient(id);
-                socket?.send(JSON.stringify(msg))
+                this.sendToClient(id, msg);
             })
         }
        // console.log('[Publish]', msg);
+    }
+
+    handleBroadcast(msg: ClientRequest) {
+        if (msg.payload) {
+            console.log('Broadcasting message...')
+            ClientRegistry.getInstance().getAllClients().forEach(id => {
+                this.sendToClient(id, msg)
+            })
+        }
+    }
+
+    sendToClient(client: string, msg: ClientRequest) {
+        const socket = ClientRegistry.getInstance().getClient(client);
+        socket?.send(JSON.stringify(msg))
     }
 
 }
