@@ -12,9 +12,9 @@ import ClientRegistry from './Registry/ClientRegistry';
 import EventRouter from './Router/EventRouter';
 import SSLConfig from './SSLConfig';
 import ServerMessageRouter from '../common/router/ServerMessageRouter';
-import { createHandshakeAckResponse, createKillResponse, createReconnectResponse, TimeoutType } from '../common/message/ServerResponse'
-
-export type VerifyClientCallback=(request:IncomingMessage,cb:(error?:Error,id?:string)=>void)=>void;
+import { createHandshakeAckResponse, createKillResponse, createReconnectResponse, TimeoutType, createErrorResponse } from '../common/message/ServerResponse'
+import HandshakeError from './Errors/HandshakeError'
+export type VerifyClientCallback = (request: IncomingMessage, cb: (error?: string, id?: string) => void) => void;
 
 
 const defaultAuthenticator:VerifyClientCallback=(req,cb)=>{
@@ -73,7 +73,7 @@ export class MMServer{
         this.httpServer.on('upgrade', (request, socket, head) => {
             this.authenticator(request, (error, client) => {
                 if (error || !client) {
-                    socket.write(JSON.stringify(error));
+                    socket.write(`HTTP/1.1 401 ${error || 'Unauthorized'} \r\n\r\n`);
                     socket.destroy();
                     return;
                 }
@@ -166,20 +166,20 @@ export class MMServer{
         socket?.send(msg);
     }
 
-    public killAllClients(){
+    public killAllClients(timeout?: TimeoutType) {
         ClientRegistry.getInstance().getAllClients()
-            .forEach((client) => this.killClient(client, undefined, 'reason'));
+            .forEach((client) => this.killClient(client, timeout, 'reason'));
     }
 
-    public reconnectClient(client: string, timeout?: number) {
+    public reconnectClient(client: string, timeout?: TimeoutType) {
         const socket = ClientRegistry.getInstance().getClient(client);
         const msg = JSON.stringify(createReconnectResponse(timeout));
         socket?.send(msg);
     }
 
-    public reconnectAllClients() {
+    public reconnectAllClients(timeout?: TimeoutType) {
         ClientRegistry.getInstance().getAllClients()
-            .forEach((client) => this.reconnectClient(client))
+            .forEach((client) => this.reconnectClient(client, timeout))
     }
 
     public getClientCount(): number {

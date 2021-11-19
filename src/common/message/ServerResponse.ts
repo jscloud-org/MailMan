@@ -32,12 +32,12 @@ export function createSubscribeAckResponse(event: string): ServerResponse {
     }
 }
 
-export function createErrorResponse(action: ServerResponseActions, msg: string): ServerResponse {
-    const error = new Error(msg);
+export function createErrorResponse(action: ServerResponseActions, error: Error): ServerResponse {
+
     return {
         success: false,
         action,
-        error: error,
+        error,
         issuedAt: Date.now()
     }
 }

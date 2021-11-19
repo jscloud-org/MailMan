@@ -271,7 +271,7 @@ export class MMClient{
         })
 
         this.ws.on("error", (err) => {
-            console.log('error:',err);
+            console.error(err);
             this.sendQueue.pauseQueue();
             this.statusChangeCallback && this.statusChangeCallback('CLOSED', this);
         })

@@ -1,9 +1,9 @@
 
 export interface ClientOptions {
-    alias: string,
-    autoReconnect: boolean,
-    retryLimit: number,
-    retryTimeoutMs: number
+    alias?: string,
+    autoReconnect?: boolean,
+    retryLimit?: number,
+    retryTimeoutMs?: number
 }
 
 export function createDefaultOptions(): ClientOptions {
