@@ -1,13 +1,14 @@
 import { AutoQueue } from "@js-cloud/flashq";
 import { ServerResponse } from "common/message/ServerResponse";
-import { EventEmitter, WebSocket } from "ws";
+import { WebSocket } from "ws";
 import { createHandshakeRequest, createPublishRequest, createSubscribeRequest, ClientRequest, KillMessage, ReconnectMessage } from '../common/message/index'
 import MessageRouter from "../common/router/MessageRouter";
-import { getSubscribeAckTag, HANDSHAKE_TAG, KILL_TAG, RECONNECT_TAG } from './constants';
+import { getSubscribeAckTag, HANDSHAKE_TAG, KILL_TAG, RECONNECT_TAG } from '../common/constants';
 import EventMessagingRouter from './routers/EventMessageRouter';
 import { ClientOptions, createDefaultOptions } from "./index";
 import LogMessageRouter from './routers/LogMessageRouter';
 import SystemRouter from './routers/SystemRouter';
+import { EventEmitter } from 'events'
 
 export type EventCallback = (payload:any,event?:string)=>void;
 export type StatusChangeCallback = (status:ConnectionState,mmClient:MMClient)=>void;
@@ -34,6 +35,9 @@ export class MMClient{
     private clientOptions:ClientOptions                 //options
     private forceDisconnect = false;
     private additionalRouters: MessageRouter[];
+    private reconnectTimeout?: any = undefined;
+    private reconnectionTrial = 0;
+    private lastReconnectDelay = 0;
 
     constructor(URL: string, clientOptions?: ClientOptions, routers: MessageRouter[] = []) {
         this.URL=URL;
@@ -49,7 +53,10 @@ export class MMClient{
         this.eventRouter = new EventMessagingRouter(this.ackQueue,this.recieveQueue);
         this.subscribedTopics = new Map();
         this.systemRouter = new SystemRouter(this.emitter);
-        this.clientOptions=clientOptions || createDefaultOptions();
+        this.clientOptions = {
+            ...createDefaultOptions(),
+            ...clientOptions
+        }
         this.attachDefaultListeners();
     }
 
@@ -107,6 +114,17 @@ export class MMClient{
         })
 
         
+    }
+
+    private scheduleReconnection() {
+        this.reconnectionTrial++;
+        let delay = Math.max(this.lastReconnectDelay, this.clientOptions.reconnectTimeoutMs);
+        if (this.clientOptions.reconnectStrategy === 'INCREMENTAL_INTERVAL') {
+            delay *= 2;
+            this.lastReconnectDelay = delay;
+        }
+        console.log('Reconnecting to server in', delay, '...')
+        return setTimeout(() => this.connect(), delay);
     }
 
     //AutoSubscribe to registered events on reconnection
@@ -184,7 +202,7 @@ export class MMClient{
     //initial client handshake after connection and exchange client id
     private performHandshake(){
 
-        //Registering an internal event before sending message
+        //Registering an internal handshake event before sending message
         this.emitter.once(HANDSHAKE_TAG, (res: ServerResponse) => {
 
             try {
@@ -241,6 +259,10 @@ export class MMClient{
 
         this.ws.on('open', () => {
             console.log('Connection open');
+            if (this.reconnectTimeout) {
+                clearTimeout(this.reconnectTimeout);
+            }
+
             this.connState="OPEN";
             this.statusChangeCallback && this.statusChangeCallback('OPEN', this);
             this.performHandshake();
@@ -252,11 +274,13 @@ export class MMClient{
             this.sendQueue.pauseQueue();
             this.statusChangeCallback && this.statusChangeCallback('CLOSED', this);
 
+            console.log('AutoReconnect', this.clientOptions.autoReconnect, ' Force disconnect', this.forceDisconnect);
             //perform reconnection if autoDisconnect
-            if (this.clientOptions.autoReconnect && !this.forceDisconnect /* Not disconnected manually */) {
-                console.log('Reconnecting to server...');
-                this.connect();
+            if (this.clientOptions.autoReconnect
+                && !this.forceDisconnect /* Not disconnected manually */
+                && this.reconnectionTrial <= this.clientOptions.reconnectLimit /*Retry limit not exceeded */) {
 
+                this.reconnectTimeout = this.scheduleReconnection();
             }
         })
 
