@@ -13,6 +13,7 @@ export default class EventMessageRouter extends MessageRouter {
     }
 
     public routeMessage(msg: ServerResponse): boolean {
+
         switch (msg.action) {
             case 'subscribe_ack':
                 this.ackQueue.enqueue(msg);

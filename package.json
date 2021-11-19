@@ -9,8 +9,7 @@
   "files": [
     "dist",
     "README.md",
-    "package.json",
-    "package-lock.json"
+    "package.json"
   ],
   "exports": {
     ".": {
@@ -27,7 +26,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/jscloud-org/FlashQueue"
+    "url": "https://github.com/jscloud-org/MailMan"
   },
   "keywords": [
     "Message Broker",

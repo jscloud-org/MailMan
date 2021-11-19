@@ -6,7 +6,7 @@ export default abstract class RegistryAdapter {
     public abstract get(clientId: string): WebSocket | undefined;
     public abstract subscribe(clientId: string, topic: string): void;
     public abstract unSubscribe(clientId: string, topic: string): void;
-    public abstract getSubscribersOf(topic: string): String[];
+    public abstract getSubscribersOf(topic: string): string[];
     public abstract getAllClients(): string[];
     public abstract getCount(): number;
     public abstract exists(clientId: string): boolean;

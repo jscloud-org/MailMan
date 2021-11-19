@@ -1,42 +1,45 @@
-import { MMClient, MMServer } from '../src';
+import { MMClient } from '../src';
+
+const client = new MMClient('ws://localhost:4000', {
+    reconnectStrategy: 'FIXED_INTERVAL',
+    reconnectTimeoutMs: 1000
+});
+
+client.onStatusChanged((status, mClient) => {
+    if (status === 'ACTIVE') {
+        console.log('master id:', client.id)
+        fireUpSubscribers();
+    }
+})
+
+const publish = () => client.publish('something', {
+    data: 'This is my first publish message'
+})
 
 
-MMServer.init(4000);
+client.connect();
 
+const fireUpSubscribers = () => {
+    for (let i = 0; i < 0; i++) {
+        const client = new MMClient('ws://localhost:4000',);
 
+        client.onStatusChanged((status, mClient) => {
+            if (status === 'ACTIVE') {
+                console.log('current id:', client.id)
+            }
+        })
 
-const number = 3;
+        client.subscribe('something', (payload, eventName) => {
+            console.log('event recieved for (', eventName, ') ->', payload);
 
-for (let i = 0; i < number; i++) {
-    const client = new MMClient('ws://localhost:4000', {
-        autoReconnect: false,
-    });
-
-    client.onStatusChanged((status, mClient) => {
-
-        if (status === 'ACTIVE') {
-            console.log('current id:', client.id)
-            // setTimeout(() => MMServer.getInstance().dropConnection(client.id), 3000)
-        }
-    })
-
-
-
-  /*  client.subscribe('something', (payload, eventName) => {
-        console.log('event recieved for (', eventName, ') ->', payload);
-
-    }).then(() => console.log('subscribed to topic'))
+        }).then(() => console.log('subscribed to topic'))
         .catch(console.error);
 
+        client.connect();
 
-    client.publish('something', {
-        data: 'This is my first publish message'
-    })
-
-*/
-
-    client.connect();
+    }
 }
+
 
 
 //setTimeout(() => MMServer.getInstance().killAllClients(), 500);

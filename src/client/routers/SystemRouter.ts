@@ -1,7 +1,7 @@
 import { ServerResponse } from "common/message/ServerResponse";
 import { EventEmitter } from 'events';
 import MessageRouter from "../../common/router/MessageRouter";
-import { HANDSHAKE_TAG, KILL_TAG, RECONNECT_TAG } from "../constants";
+import { HANDSHAKE_TAG, KILL_TAG, RECONNECT_TAG } from "../../common/constants";
 
 export default class SystemRouter extends MessageRouter {
 

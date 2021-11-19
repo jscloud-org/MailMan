@@ -3,17 +3,19 @@ import { createServer as createHttpServer, IncomingMessage, Server } from 'http'
 import { createServer as createHttpsServer } from 'https';
 import { v4 as uuid } from 'uuid';
 import { WebSocket, WebSocketServer } from 'ws';
+import { EventEmitter } from 'events'
 import Logger from '../common/Logger';
-import MessageRouter from '../common/router/MessageRouter';
+import { createHandshakeAckResponse, createKillResponse, createReconnectResponse, ServerResponse, TimeoutType } from '../common/message/ServerResponse';
+import ServerMessageRouter from '../common/router/ServerMessageRouter';
 import HubNotInitialized from './Errors/HubNotInitialized';
 import HashMapRegistryAdapter from './Registry/adapter/HashMapRegistryAdapter';
 import RegistryAdapter from './Registry/adapter/RegistryAdapter';
 import ClientRegistry from './Registry/ClientRegistry';
 import EventRouter from './Router/EventRouter';
 import SSLConfig from './SSLConfig';
-import ServerMessageRouter from '../common/router/ServerMessageRouter';
-import { createHandshakeAckResponse, createKillResponse, createReconnectResponse, TimeoutType, createErrorResponse } from '../common/message/ServerResponse'
-import HandshakeError from './Errors/HandshakeError'
+import { SUBSCRIBE_ACK_TAG } from '../common/constants';
+
+
 export type VerifyClientCallback = (request: IncomingMessage, cb: (error?: string, id?: string) => void) => void;
 
 
@@ -32,6 +34,7 @@ export class MMServer{
     private router: ServerMessageRouter
     private additionalRouters: ServerMessageRouter[]
     private log: Function
+    private emitter: EventEmitter
 
     PORT: number
 
@@ -53,8 +56,8 @@ export class MMServer{
         this.socketServer = new WebSocketServer({
             noServer: true
         });
-
-        this.router = new EventRouter();
+        this.emitter = new EventEmitter();
+        this.router = new EventRouter(this.emitter);
         this.additionalRouters = additionalRouters;
         this.authenticator = authenticator;
         this.clientRegistry = ClientRegistry.init(adapter);
@@ -71,10 +74,12 @@ export class MMServer{
         this.log('attaching default listeners...');
 
         this.httpServer.on('upgrade', (request, socket, head) => {
+            this.log('New connection upgrade request from ' + request.url);
             this.authenticator(request, (error, client) => {
                 if (error || !client) {
                     socket.write(`HTTP/1.1 401 ${error || 'Unauthorized'} \r\n\r\n`);
                     socket.destroy();
+                    this.log('Connection request denied', 'error')
                     return;
                 }
                 this.log('Connection authorized for client ' + client, 'success');
@@ -84,6 +89,8 @@ export class MMServer{
                 })
             })
         })
+
+
 
         this.socketServer.on('connection', (socket: WebSocket, request: IncomingMessage, client: string) => {
 
@@ -136,6 +143,10 @@ export class MMServer{
             this.log('WebSocket Server is Up and listening on PORT: ' + this.PORT, 'success')
         })
 
+        this.emitter.on(SUBSCRIBE_ACK_TAG, (clientId, response) => {
+            this.send(clientId, response);
+        })
+
         this.log('all listeners attached', 'success')
     }
 
@@ -143,6 +154,13 @@ export class MMServer{
         if (!this.mInstance)
             throw new HubNotInitialized();
         return this.mInstance;
+    }
+
+    private send(client: string, response: ServerResponse) {
+        const socket = ClientRegistry.getInstance().getClient(client);
+        if (socket) {
+            socket.send(JSON.stringify(response));
+        }
     }
 
     public static init(PORT: number,

@@ -4,7 +4,7 @@ import { WebSocket } from 'ws'
 export default class HashMapRegostryAdapter extends RegostryAdapter {
 
     private clientMap: Map<string, WebSocket>
-    private topicMap: Map<string, Set<String>>
+    private topicMap: Map<string, Set<string>>
 
     constructor() {
         super();
@@ -36,9 +36,9 @@ export default class HashMapRegostryAdapter extends RegostryAdapter {
         this.topicMap.set(topic, list);
     }
 
-    public getSubscribersOf(topic: string): String[] {
+    public getSubscribersOf(topic: string): string[] {
         const list = this.topicMap.get(topic) || new Set();
-        return Array.from(list)
+        return Array.from(list);
     }
 
     public getAllClients(): string[] {
