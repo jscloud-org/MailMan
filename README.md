@@ -39,6 +39,35 @@ Open up a terminal and install this library like this,
 npm install @js-cloud/mailman
 ```
 
+## Start Server
+
+```js
+import { MMServer } from '@js-cloud/mailman'
+
+MMServer.init(4000);
+```
+
+### customize server
+
+```js
+
+const sslconfig: SSLConfig = {
+    cert: 'path to cert',
+    key: 'path to key'
+}
+//custom handler for new connection request
+const verifyClientCallback: VerifyClientCallback = (req, done) => {
+    const newId = uuid();
+    //if verified successfully
+    done(null /*Error object is null for success*/, newId /*New generated Id for client*/);
+    //if not verified
+    const error=new ApiError('some error message')/*Define Api error customized for your application*/
+    done(error,null);
+}
+
+//Initialize Server at PORT 4000
+MMServer.init(4000, sslconfig, undefined, verifyClientCallback);
+```
 
 
 ## Contribute

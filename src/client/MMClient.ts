@@ -1,14 +1,14 @@
 import { AutoQueue } from "@js-cloud/flashq";
-import { ServerResponse } from "common/message/ServerResponse";
+import Logger, { LogType } from "../common/Logger";
+import { ServerResponse } from "../common/message/ServerResponse";
+import { EventEmitter } from 'events';
 import { WebSocket } from "ws";
-import { createPublishRequest, createSubscribeRequest, ClientRequest, KillMessage, ReconnectMessage, createBroadcastRequest } from '../common/message/index'
+import { BROADCAST_EVENT, getSubscribeAckTag, HANDSHAKE_TAG, KILL_TAG, RECONNECT_TAG } from '../common/constants';
+import { ClientRequest, createBroadcastRequest, createPublishRequest, createSubscribeRequest, KillMessage, ReconnectMessage } from '../common/message/index';
 import MessageRouter from "../common/router/MessageRouter";
-import { BROADCASR_EVENT, BROADCAST_EVENT, getSubscribeAckTag, HANDSHAKE_TAG, KILL_TAG, RECONNECT_TAG } from '../common/constants';
-import EventMessagingRouter from './routers/EventMessageRouter';
 import { ClientOptions, createDefaultOptions } from "./index";
-import LogMessageRouter from './routers/LogMessageRouter';
+import EventMessagingRouter from './routers/EventMessageRouter';
 import SystemRouter from './routers/SystemRouter';
-import { EventEmitter } from 'events'
 
 export type EventCallback = (payload:any,event?:string)=>void;
 export type StatusChangeCallback = (status:ConnectionState,mmClient:MMClient)=>void;
@@ -38,6 +38,7 @@ export class MMClient{
     private reconnectTimeout?: any = undefined;
     private reconnectionTrial = 0;
     private lastReconnectDelay = 0;
+    private logger: Logger
 
     constructor(URL: string, clientOptions?: ClientOptions, routers: MessageRouter[] = []) {
         this.URL=URL;
@@ -45,6 +46,7 @@ export class MMClient{
         this.sendQueue.pauseQueue();                    //send queue should be paused on start to deny all contact with server before handshake
         this.recieveQueue = new AutoQueue();
         this.ackQueue = new AutoQueue();
+        this.logger = new Logger();
         this.alias = '';
         this.id = 'NOT_ASSIGNED';
         this.connState='CLOSED'
@@ -59,6 +61,12 @@ export class MMClient{
         }
         this.attachDefaultListeners();
     }
+
+    private log(msg: any, type?: LogType) {
+        if (this.clientOptions.logEnabled)
+            this.logger.log(msg, type);
+    }
+
 
     /**
      * Callback function invoked when status of the client changes.
@@ -125,6 +133,7 @@ export class MMClient{
         
     }
 
+    //returns a timeout for the next scheduled reconnection
     private scheduleReconnection() {
         this.reconnectionTrial++;
         //@ts-ignore
@@ -133,7 +142,7 @@ export class MMClient{
             delay *= 2;
             this.lastReconnectDelay = delay;
         }
-        console.log('Reconnecting to server in', delay, '...')
+        this.log('Reconnecting to server in ' + delay + 'ms...', 'warn')
         return setTimeout(() => this.connect(), delay);
     }
 
@@ -141,7 +150,7 @@ export class MMClient{
     private runAutoSubscribe(){
         this.subscribedTopics.forEach((cb,topic)=>{
             this.subscribe(topic,cb)
-            .then(()=>console.log('Subscribed to',topic))
+                .then(() => this.log('Subscribed to ' + topic, 'success'))
             .catch((error)=>console.error('Error subscribing to',topic,error));
         })
     }
@@ -163,6 +172,7 @@ export class MMClient{
         this.autoDisconnect(true);
     }
 
+    //Used only when a disconnect sequence is initiated by client itself
     private autoDisconnect(forceDisconnect = false) {
         if (this.connState !== 'CLOSED' && this.ws) {
             this.sendQueue.pauseQueue();
@@ -239,7 +249,7 @@ export class MMClient{
 
         //process only once when a remote kill command recieved and emiited by internal emiiter 
         this.emitter.once(KILL_TAG /* KILL event name */, (data: KillMessage) => {
-            console.log('Killing client, reason',data.reason);
+            this.log('Killing client, reason ' + data.reason, 'warn');
             if(data.timeout==='immediate'){
                 this.disconnect();
             }
@@ -250,7 +260,7 @@ export class MMClient{
 
         //process only once when a remote reconnect command recieved and emiited by internal emiiter
         this.emitter.once(RECONNECT_TAG /* RECONNECT event name */, (data: ReconnectMessage) => {
-            console.log('reconnecting to server in', data.timeout,'ms');
+            this.log('Reconnecting to server in ' + data.timeout + 'ms...', 'warn');
             if (data.timeout === 'immediate') {
                 this.reconnect();
             }
@@ -260,7 +270,7 @@ export class MMClient{
         })
 
         this.ws.on('open', () => {
-            console.log('Connection open');
+            this.log('Connection open', 'success');
             if (this.reconnectTimeout) {
                 clearTimeout(this.reconnectTimeout);
             }
@@ -270,12 +280,11 @@ export class MMClient{
         })
 
         this.ws.on("close", () => {
-            console.log('Connection closed');
+            this.log('Connection closed', 'error');
             this.connState = 'CLOSED'
             this.sendQueue.pauseQueue();
             this.statusChangeCallback && this.statusChangeCallback('CLOSED', this);
 
-            console.log('AutoReconnect', this.clientOptions.autoReconnect, ' Force disconnect', this.forceDisconnect);
             //perform reconnection if autoDisconnect
             if (this.clientOptions.autoReconnect
                 && !this.forceDisconnect /* Not disconnected manually */
@@ -325,7 +334,6 @@ export class MMClient{
                         this.emitter.emit(item.event, item.payload);
                     break;
                 case 'broadcast':
-                    console.log('payload is ', item);
                     if (item.payload)
                         this.emitter.emit(BROADCAST_EVENT, item.payload);
                     break;

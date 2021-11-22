@@ -4,7 +4,8 @@ export interface ClientOptions {
     reconnectStrategy?: 'FIXED_INTERVAL' | 'INCREMENTAL_INTERVAL',
     autoReconnect?: boolean,
     reconnectLimit?: number,
-    reconnectTimeoutMs?: number
+    reconnectTimeoutMs?: number,
+    logEnabled?: boolean,
 }
 
 export function createDefaultOptions(): ClientOptions {
@@ -13,6 +14,7 @@ export function createDefaultOptions(): ClientOptions {
         reconnectStrategy: 'INCREMENTAL_INTERVAL',
         autoReconnect: true,
         reconnectLimit: 3,
-        reconnectTimeoutMs: 1000
+        reconnectTimeoutMs: 1000,
+        logEnabled: true
     }
 }

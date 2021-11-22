@@ -4,7 +4,7 @@ import { createServer as createHttpsServer } from 'https';
 import { v4 as uuid } from 'uuid';
 import { WebSocket, WebSocketServer } from 'ws';
 import { EventEmitter } from 'events'
-import Logger from '../common/Logger';
+import Logger, { LogType } from '../common/Logger';
 import { createHandshakeAckResponse, createKillResponse, createReconnectResponse, ServerResponse, TimeoutType } from '../common/message/ServerResponse';
 import ServerMessageRouter from '../common/router/ServerMessageRouter';
 import HubNotInitialized from './Errors/HubNotInitialized';
@@ -33,17 +33,20 @@ export class MMServer{
     private authenticator: VerifyClientCallback;
     private router: ServerMessageRouter
     private additionalRouters: ServerMessageRouter[]
-    private log: Function
+    private logger: Logger
     private emitter: EventEmitter
 
     PORT: number
 
-    private constructor(PORT: number, sslConfig: SSLConfig | undefined,
+    private constructor(PORT: number,
+        sslConfig: SSLConfig | undefined,
         adapter: RegistryAdapter,
         authenticator: VerifyClientCallback,
         additionalRouters: ServerMessageRouter[] = []) {
+
         this.PORT = PORT;
-        this.log = new Logger("SERVER").log;
+        this.logger = new Logger("SERVER");
+
         this.log('Initializing new Hub Server');
 
         //build Http/s Server
@@ -64,6 +67,10 @@ export class MMServer{
         this.attachDefaultListeners();
         this.httpServer.listen(PORT);
 
+    }
+
+    private log(msg: any, type?: LogType) {
+        this.logger.log(msg, type);
     }
 
 
@@ -125,8 +132,6 @@ export class MMServer{
             })
 
             const handshakeMessage = createHandshakeAckResponse(client);
-            console.log('message is', handshakeMessage)
-
             socket.send(JSON.stringify(handshakeMessage));
 
         });

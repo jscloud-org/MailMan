@@ -59,7 +59,6 @@ export default class EventRouter extends ServerMessageRouter {
 
     handleBroadcast(msg: ClientRequest) {
         if (msg.payload) {
-            console.log('Broadcasting message...')
             ClientRegistry.getInstance().getAllClients().forEach(id => {
                 this.sendToClient(id, msg)
             })

@@ -16,26 +16,29 @@ export function Loggable(fn: Function, ...args: any[]) {
     }
 }
 
-export default class Logger{
-    source:'SERVER'|'CLIENT'
+export type LoggerSource = 'SERVER' | 'CLIENT';
+export type LogType = 'error' | 'info' | 'warn' | 'success';
 
-    constructor(src: "SERVER" | "CLIENT" = "CLIENT") {
+export default class Logger{
+    source: LoggerSource
+
+    constructor(src: LoggerSource = "CLIENT") {
         this.source = src;
     }
 
-    public log(msg: any, logType: 'error' | 'info' | 'warn' | 'success' = 'info') {
+    public log(msg: any, logType: LogType = 'info') {
         isDev() && (() => {
             switch (logType) {
-                case 'error': return console.error(errorTag('ERROR'),this.source, msg);
-                case 'info': return console.error(infoTag('INFO'), this.source, msg);
-                case 'warn': return console.error(warnTag('WARN'), this.source, msg);
-                case 'success': return console.error(successTag('SUCCESS'), this.source, msg);
+                case 'error': return console.error(warnTag(this.source), errorTag('ERROR'), msg);
+                case 'info': return console.error(warnTag(this.source), infoTag('INFO'), msg);
+                case 'warn': return console.error(warnTag(this.source), warnTag('WARN'), msg);
+                case 'success': return console.error(warnTag(this.source), successTag('SUCCESS'), msg);
             }
         })()
     }
 }
 
-export function log(msg: any, logType: 'error' | 'info' | 'warn' | 'success' = 'info') {
+export function log(msg: any, logType: LogType = 'info') {
     isDev() && (() => {
         switch (logType) {
             case 'error': return console.error(errorTag('ERROR'), msg);
