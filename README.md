@@ -47,7 +47,7 @@ import { MMServer } from '@js-cloud/mailman'
 MMServer.init(4000);
 ```
 
-### customize server
+### Customize server
 
 ```js
 
@@ -67,6 +67,104 @@ const verifyClientCallback: VerifyClientCallback = (req, done) => {
 
 //Initialize Server at PORT 4000
 MMServer.init(4000, sslconfig, undefined, verifyClientCallback);
+```
+
+## Client
+
+```js
+
+import { MMClient } from '@js-cloud/mailman';
+
+//create a new Instance of Client
+const client = new MMClient('ws://localhost:4000'/*URL of MM Server*/);
+```
+
+### Customize Client
+
+```js
+
+//define options for client
+const options: ClientOptions = {
+    alias: 'mm_client',                         //nickname/alias for client, easy for identifying clients
+    reconnectStrategy: 'INCREMENTAL_INTERVAL',  //Strategy for reconnection -> 'INCREMENTAL_INTERVAL' | 'FIXED_INTERVAL'
+    autoReconnect: true,                        //Connect automatically after reconnection. Not on manual disconenction
+    reconnectLimit: 5,                          //Max reconnect tries  
+    reconnectTimeoutMs: 1000,                   //Reconect interval
+    logEnabled: true,                           //Enable Pretty logging for client events
+}
+
+//create a new Instance of Client
+const client = new MMClient('ws://localhost:4000'/*URL of MM Server*/,options);
+
+//connect to server
+client.connect();
+```
+
+### Detect client status change
+
+It is often necessary to detect state change of the client when building resilient applications. MM provides a callback mechanism to be aware of the state changes 
+of the client. There can possibly be 4 states of the client.
+
+`OPEN` : The Websocket conenction is open, but server acknowledgement is pending (Handshake and Id assignment). All the messages published in this state will be queued and starts sending them once the connection is `ACTIVE`.
+
+`ACTIVE`: The client has been assigned an Id and is ready to send and recieve messages from the server.
+
+`INACTIVE`: The client is disable and hence transfer of messages is not possible. This state may occur once the client has started disconnection sequence or have manually paused the connection by the user.
+
+`CLOSED` : The client has closed connection, either manually, or remotely initiated by the host server.
+
+```js
+
+//callback invoked whenever a change in connection state is detected
+client.onStatusChanged((status, mClient) => {
+    console.log('Current status :',status);
+})
+```
+
+### Subcribe to Topics
+
+```js
+
+//callback invoked whenever a change in connection state is detected
+client.subscribe('my_topic',(data)=>console.log('message recieved ',data));
+```
+
+`client.subscribe()` is a promise. So, we can acknowledge subscription to a topic by consuming this promise
+
+```js
+
+//using async/await 
+try{
+  const callback=(data)=>console.log('message recieved ',data);
+
+  const result=await client.subscribe('my_topic',callback);
+  console.log('subscribed to topic');
+
+}catch(er){
+  console.log(er);
+}
+
+//using then
+ const callback=(data)=>console.log('message recieved ',data);
+
+ client.subscribe('my_topic',callback)
+ .then(()=>console.info('subscribed to topic'))
+ .catch(console.error);
+
+```
+
+
+### Publish messages to topics
+
+```js
+client.publish('my_topic',payload /*Can be any object, string, number or any primitive types*/)
+```
+
+### Broadcast messages to all clients
+
+
+```js
+client.broadcast('my_topic',payload /*Can be any object, string, number or any primitive types*/)
 ```
 
 
