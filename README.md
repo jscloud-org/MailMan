@@ -14,9 +14,9 @@ A superfast and light-weight message broker for pub/sub communication over netwo
 - [About](#about)
 - [Installation](#installation)
 - [Modules](#modules)
-  - [FlashQ](#flashq)
-  - [AutoQ](#autoq)
-- [FAQ](#faq)
+  - [MMServer](#mmserver)
+  - [MMClient](#mmclient)
+
 - [Contribute](#contribute)
 - [Support](#support)
 - [License](#license)
@@ -41,7 +41,7 @@ npm install @js-cloud/mailman
 
 # Modules
 
-## Start Server
+## MMServer
 
 ```js
 import { MMServer } from '@js-cloud/mailman'
@@ -71,7 +71,7 @@ const verifyClientCallback: VerifyClientCallback = (req, done) => {
 MMServer.init(4000, sslconfig, undefined, verifyClientCallback);
 ```
 
-## Client
+## MMClient
 
 ```js
 
