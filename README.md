@@ -16,7 +16,6 @@ A superfast and light-weight message broker for pub/sub communication over netwo
 - [Modules](#modules)
   - [MMServer](#mmserver)
   - [MMClient](#mmclient)
-
 - [Contribute](#contribute)
 - [Support](#support)
 - [License](#license)
